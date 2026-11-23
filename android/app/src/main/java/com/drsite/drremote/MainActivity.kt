@@ -1,141 +1,125 @@
 package com.drsite.drremote
 
+import android.app.Activity
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-
-private val DarkBackground = Color(0xFF090D0B)
-private val Emerald = Color(0xFF00C987)
-private val White = Color(0xFFF4F7F5)
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            DrRemoteApp()
+            DrRemoteApp(this)
         }
     }
 }
 
 @Composable
-fun DrRemoteApp() {
+fun DrRemoteApp(activity: Activity) {
     var consent by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf("آماده اتصال") }
+    var loading by remember { mutableStateOf(false) }
 
     MaterialTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = DarkBackground
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "DR",
-                    color = Emerald,
-                    fontSize = 58.sp,
-                    fontWeight = FontWeight.Black
+            Text(
+                text = "DR REMOTE",
+                style = MaterialTheme.typography.headlineLarge
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("اتصال دستگاه با اجازه صاحب دستگاه")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = consent,
+                    onCheckedChange = { consent = it }
                 )
-
-                Text(
-                    text = "REMOTE",
-                    color = White,
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "مدیریت امن دستگاه‌های شما",
-                    color = Color.LightGray,
-                    fontSize = 15.sp
-                )
-
-                Spacer(modifier = Modifier.height(42.dp))
-
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFF151D19)
-                    ),
-                    shape = RoundedCornerShape(20.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp)
-                    ) {
-                        Text(
-                            text = "اتصال دستگاه",
-                            color = White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "برای اتصال به پنل Dr Remote، ابتدا باید درخواست اتصال را با اطلاع و رضایت خودتان ثبت کنید.",
-                            color = Color.LightGray,
-                            fontSize = 14.sp
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = consent,
-                                onCheckedChange = { consent = it },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = Emerald
-                                )
-                            )
-
-                            Text(
-                                text = "درخواست اتصال را تأیید می‌کنم",
-                                color = White,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Button(
-                            onClick = {},
-                            enabled = consent,
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Emerald,
-                                contentColor = Color.Black
-                            )
-                        ) {
-                            Text("شروع اتصال")
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "نسخه 1.0.0 | Dr Site",
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
+                Text("با اتصال دستگاه موافقم")
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                enabled = consent && !loading,
+                onClick = {
+                    loading = true
+                    status = "در حال اتصال..."
+
+                    Thread {
+                        var result = "خطا در اتصال به سرور"
+
+                        try {
+                            val url = URL(
+                                "http://127.0.0.1:5000/connect"
+                            )
+
+                            val connection =
+                                url.openConnection() as HttpURLConnection
+
+                            connection.requestMethod = "POST"
+                            connection.connectTimeout = 10000
+                            connection.readTimeout = 15000
+                            connection.doOutput = true
+                            connection.setRequestProperty(
+                                "Content-Type",
+                                "application/json"
+                            )
+
+                            val body =
+                                """{"device_name":"${Build.MODEL}","consent":true}"""
+
+                            connection.outputStream.use {
+                                it.write(body.toByteArray(Charsets.UTF_8))
+                            }
+
+                            val code = connection.responseCode
+
+                            result = if (code in 200..299) {
+                                "درخواست اتصال ارسال شد"
+                            } else {
+                                "خطای سرور: $code"
+                            }
+
+                            connection.disconnect()
+
+                        } catch (e: Exception) {
+                            result = "اتصال ناموفق: ${e.message}"
+                        }
+
+                        activity.runOnUiThread {
+                            status = result
+                            loading = false
+                        }
+                    }.start()
+                }
+            ) {
+                Text(if (loading) "لطفاً صبر کنید..." else "شروع اتصال")
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(status)
         }
     }
 }
